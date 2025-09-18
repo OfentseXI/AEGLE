@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OCR Demo with Tesseract.js</title>
+  <!-- 1) Include Tesseract.js from a CDN: -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2/dist/tesseract.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      line-height: 1.6;
+    }
+    #preview {
+      max-width: 100%;
+      margin-top: 10px;
+    }
+    #result {
+      white-space: pre-wrap;
+      background: #f4f4f4;
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
+    #progress {
+      margin-top: 10px;
+      font-size: 0.9em;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <h2>OCR Demo: Upload an Image</h2>
+  <!-- 2) File input for the user to select an image -->
+  <input type="file" id="fileInput" accept="image/*" />
+
+  <!-- 3) Image preview (so the user sees which file was chosen) -->
+  <img id="preview" src="" alt="Image preview will appear here" />
+
+  <!-- 4) Button to trigger OCR -->
+  <button id="startOcr" disabled>Start OCR</button>
+
+  <!-- 5) Progress indicator (optional) -->
+  <div id="progress"></div>
+
+  <!-- 6) Area to display recognized text -->
+  <div id="result"></div>
+
+  <!-- 7) Your custom script that ties everything together -->
+  <script>
+    // Grab references to DOM elements:
+    const fileInput = document.getElementById('fileInput');
+    const preview = document.getElementById('preview');
+    const startOcrBtn = document.getElementById('startOcr');
+    const progressDiv = document.getElementById('progress');
+    const resultDiv = document.getElementById('result');
+    let selectedFile = null;
+
+    // When the user picks a file, show a preview and enable the OCR button:
+    fileInput.addEventListener('change', (event) => {
+      const files = event.target.files;
+      if (files && files[0]) {
+        selectedFile = files[0];
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          preview.src = e.target.result; // show image preview
+          startOcrBtn.disabled = false;  // enable the button
+          resultDiv.textContent = '';    // clear any previous result
+          progressDiv.textContent = '';
+        };
+        reader.readAsDataURL(selectedFile);
+      }
+    });
+
+    // When the user clicks "Start OCR," call Tesseract.js:
+    startOcrBtn.addEventListener('click', () => {
+      if (!selectedFile) return;
+
+      resultDiv.textContent = 'Processing... please wait.';
+      progressDiv.textContent = '';
+
+      // Use FileReader to turn the selected file into a dataURL (base64).
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageDataUrl = e.target.result;
+
+        // Start Tesseract OCR worker:
+        Tesseract.recognize(
+          imageDataUrl,
+          'eng', // you can change this to another language code if needed
+          {
+            logger: (m) => {
+              // The logger lets us show progress updates (in the 'progress' div).
+              // m.progress is a number between 0 and 1. m.status might be "recognizing text", etc.
+              const percent = Math.round(m.progress * 100);
+              progressDiv.textContent = `${m.status} (${percent}%)`;
+            },
+          }
+        )
+          .then((result) => {
+            // When OCR is done, display the recognized text:
+            resultDiv.textContent = result.data.text;
+            startOcrBtn.disabled = true; // disable button until user chooses a new file
+          })
+          .catch((err) => {
+            resultDiv.textContent = 'Error during OCR: ' + err.message;
+            console.error(err);
+          });
+      };
+      reader.readAsDataURL(selectedFile);
+    });
+  </script>
+</body>
+</html>
