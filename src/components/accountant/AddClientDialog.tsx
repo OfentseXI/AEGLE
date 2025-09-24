@@ -10,8 +10,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-//import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+import { auth, db } from "@/integrations/firebase/client";
+import {
+  collection,
+  query,
+  where,
+  limit,
+  getDocs,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 
 interface AddClientDialogProps {
   open: boolean;
@@ -38,20 +48,24 @@ export function AddClientDialog({
       return;
     }
 
+    if (!auth.currentUser) {
+      toast({
+        title: "Error",
+        description: "Not authenticated",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
+
     try {
-      // Get current user (accountant)
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error("Not authenticated");
+      // 1. Check if client exists in "profiles" collection
+      const profilesRef = collection(db, "profiles");
+      const q = query(profilesRef, where("email", "==", clientEmail), limit(1));
+      const querySnapshot = await getDocs(q);
 
-      // Check if client exists in profiles
-      const { data: clientProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", clientEmail)
-        .limit(1);
-
-      if (!clientProfile || clientProfile.length === 0) {
+      if (querySnapshot.empty) {
         toast({
           title: "Client not found",
           description: "The client email does not exist in the system",
@@ -60,13 +74,15 @@ export function AddClientDialog({
         return;
       }
 
-      // Add client relationship
-      const { error } = await supabase.from("accountant_clients").insert({
-        accountant_id: userData.user.id,
-        client_id: clientProfile[0].id,
-      });
+      const clientProfile = querySnapshot.docs[0].data();
 
-      if (error) throw error;
+      // 2️. Add accountant-client relationship
+      await addDoc(collection(db, "accountant_clients"), {
+        accountant_id: auth.currentUser.uid,
+        client_id: clientProfile.id,
+        created_at: serverTimestamp(), // Firestore timestamp
+        status: "pending", // optional default
+      });
 
       toast({
         title: "Success",
@@ -76,10 +92,10 @@ export function AddClientDialog({
       setClientEmail("");
       onClientAdded();
       onOpenChange(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error",
-        description: error.message || "Failed to add client",
+        description: "Failed to add client",
         variant: "destructive",
       });
     } finally {

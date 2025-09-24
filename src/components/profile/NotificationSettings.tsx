@@ -3,10 +3,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-//import { supabase } from "@/integrations/supabase/client";
-import { Database } from "@/integrations/supabase/types";
+import { getAuth } from "firebase/auth";
+import { doc, getDoc, updateDoc, setDoc } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
-type NotificationType = Database["public"]["Enums"]["notification_type"];
+type NotificationType = "email" | "in_app" | "both" | "none";
 
 export function NotificationSettings() {
   const { toast } = useToast();
@@ -16,57 +17,73 @@ export function NotificationSettings() {
 
   useEffect(() => {
     const loadSettings = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("notification_preferences")
-          .eq("id", user.id)
-          .single();
+      try {
+        const auth = getAuth();
+        const user = auth.currentUser;
 
-        if (profile && profile.notification_preferences) {
-          // Cast the value to ensure type safety
-          setNotificationPreference(
-            profile.notification_preferences as NotificationType
-          );
+        if (!user) return;
+
+        const profileRef = doc(db, "profiles", user.uid);
+        const profileSnap = await getDoc(profileRef);
+
+        if (profileSnap.exists()) {
+          const data = profileSnap.data();
+          if (data.notification_preferences) {
+            setNotificationPreference(
+              data.notification_preferences as NotificationType
+            );
+          }
         }
+      } catch (error) {
+        console.error("Error loading notification settings:", error);
+        toast({
+          title: "Error",
+          description: "Could not load your notification settings.",
+          variant: "destructive",
+        });
       }
     };
+
     loadSettings();
-  }, []);
+  }, [toast]);
 
   const onSubmit = async () => {
     setIsLoading(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const auth = getAuth();
+      const user = auth.currentUser;
       if (!user) throw new Error("No user found");
 
-      const { error } = await supabase
-        .from("profiles")
-        .update({ notification_preferences: notificationPreference })
-        .eq("id", user.id);
+      const profileRef = doc(db, "profiles", user.uid);
 
-      if (error) throw error;
+      // ensure profile doc exists
+      const profileSnap = await getDoc(profileRef);
+      if (profileSnap.exists()) {
+        await updateDoc(profileRef, {
+          notification_preferences: notificationPreference,
+        });
+      } else {
+        await setDoc(profileRef, {
+          notification_preferences: notificationPreference,
+          email: user.email,
+        });
+      }
 
       toast({
         title: "Settings updated",
         description: "Your notification preferences have been saved.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error("Error saving settings:", error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "Could not save settings.",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
   };
-
   return (
     <div className="space-y-6">
       <div className="space-y-4">

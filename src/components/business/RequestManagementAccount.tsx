@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Card,
   CardContent,
@@ -12,6 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { toast } from "sonner";
 import { FileText, Send } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export function RequestManagementAccount() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,12 +30,7 @@ export function RequestManagementAccount() {
     setIsSubmitting(true);
 
     try {
-      // Simulate sending request to accountant
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Store the request locally for demo purposes
       const request = {
-        id: Date.now().toString(),
         clientName: "Alex Johnson",
         companyName: "Johnson Enterprises Ltd",
         periodStart: formData.periodStart,
@@ -40,19 +38,11 @@ export function RequestManagementAccount() {
         notes: formData.notes,
         urgency: formData.urgency,
         status: "pending",
-        requestDate: new Date().toISOString(),
-        accountantId: "sarah-taylor", // Demo accountant
+        requestDate: serverTimestamp(),
+        accountantId: "sarah-taylor", // demo accountant
       };
 
-      // Store in localStorage for demo
-      const existingRequests = JSON.parse(
-        localStorage.getItem("managementAccountRequests") || "[]"
-      );
-      existingRequests.push(request);
-      localStorage.setItem(
-        "managementAccountRequests",
-        JSON.stringify(existingRequests)
-      );
+      await addDoc(collection(db, "managementAccountRequests"), request);
 
       toast.success("Management account request sent to your accountant!");
 
@@ -63,7 +53,8 @@ export function RequestManagementAccount() {
         notes: "",
         urgency: "normal",
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Error sending request:", error);
       toast.error("Failed to send request. Please try again.");
     } finally {
       setIsSubmitting(false);
@@ -148,7 +139,7 @@ export function RequestManagementAccount() {
             />
           </div>
 
-          <Button type="submit" className="w-full">
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? (
               "Sending Request..."
             ) : (

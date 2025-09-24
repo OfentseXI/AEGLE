@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -5,7 +6,6 @@ import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-//import { supabase } from "@/integrations/supabase/client";
 import {
   Form,
   FormControl,
@@ -14,6 +14,9 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { getAuth } from "firebase/auth";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 const profileSchema = z.object({
   full_name: z.string().min(2, "Name must be at least 2 characters"),
@@ -34,50 +37,61 @@ export function ProfileForm() {
 
   useEffect(() => {
     const loadProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
+      try {
+        const auth = getAuth();
+        const user = auth.currentUser;
 
-        if (profile) {
+        if (!user) return;
+
+        const profileRef = doc(db, "profiles", user.uid);
+        const profileSnap = await getDoc(profileRef);
+
+        if (profileSnap.exists()) {
+          const profile = profileSnap.data();
           form.reset({
             full_name: profile.full_name || "",
             company_name: profile.company_name || "",
           });
         }
+      } catch (error) {
+        console.error("Error loading profile:", error);
+        toast({
+          title: "Error",
+          description: "Could not load your profile data.",
+          variant: "destructive",
+        });
       }
     };
+
     loadProfile();
-  }, [form]);
+  }, [form, toast]);
 
   const onSubmit = async (values: z.infer<typeof profileSchema>) => {
     setIsLoading(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const auth = getAuth();
+      const user = auth.currentUser;
       if (!user) throw new Error("No user found");
 
-      const { error } = await supabase
-        .from("profiles")
-        .update(values)
-        .eq("id", user.id);
+      const profileRef = doc(db, "profiles", user.uid);
 
-      if (error) throw error;
+      // If profile exists, update. Otherwise, create new.
+      const profileSnap = await getDoc(profileRef);
+      if (profileSnap.exists()) {
+        await updateDoc(profileRef, values);
+      } else {
+        await setDoc(profileRef, { ...values, email: user.email });
+      }
 
       toast({
         title: "Profile updated",
         description: "Your profile has been successfully updated.",
       });
     } catch (error: any) {
+      console.error("Error saving profile:", error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Could not save profile.",
         variant: "destructive",
       });
     } finally {

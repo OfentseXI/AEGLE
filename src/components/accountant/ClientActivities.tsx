@@ -8,62 +8,146 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  getAccountantSummary,
-  getLedgerEntries,
-  getNewEntriesForAccountant,
-  markEntriesAsReviewed,
-} from "@/lib/ledger-operations";
-import {
-  FileText,
-  DollarSign,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-} from "lucide-react";
+import { FileText, DollarSign, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { db } from "@/integrations/firebase/client";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  updateDoc,
+  doc,
+} from "firebase/firestore";
+import { getAuth, onAuthStateChanged, User } from "firebase/auth";
+
+interface LedgerEntry {
+  id: string;
+  storeName: string;
+  date: string;
+  items: { name: string; amount: number }[];
+  total: number;
+  reviewed: boolean;
+}
+
+interface ClientSummary {
+  companyName: string;
+  totalEntries: number;
+  newEntries: number;
+  lastActivity: string;
+  totalAmount: number;
+}
 
 export function ClientActivities() {
-  const [clientSummaries, setClientSummaries] = useState<
-    Array<{
-      companyName: string;
-      totalEntries: number;
-      newEntries: number;
-      lastActivity: string;
-      totalAmount: number;
-    }>
-  >([]);
-
+  const [clientSummaries, setClientSummaries] = useState<ClientSummary[]>([]);
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
-  const [clientEntries, setClientEntries] = useState<any[]>([]);
-  const [newEntries, setNewEntries] = useState<any[]>([]);
+  const [clientEntries, setClientEntries] = useState<LedgerEntry[]>([]);
+  const [newEntries, setNewEntries] = useState<LedgerEntry[]>([]);
+  const [userId, setUserId] = useState<string>("");
 
+  // Load user ID
   useEffect(() => {
-    // Load client summaries
-    const summaries = getAccountantSummary();
-    setClientSummaries(summaries);
-
-    // Auto-refresh every 10 seconds to check for new entries
-    const interval = setInterval(() => {
-      const updatedSummaries = getAccountantSummary();
-      setClientSummaries(updatedSummaries);
-    }, 10000);
-
-    return () => clearInterval(interval);
+    const auth = getAuth();
+    onAuthStateChanged(auth, (user: User | null) => {
+      if (user) setUserId(user.uid);
+    });
   }, []);
 
-  const handleViewClient = (companyName: string) => {
+  // Fetch client summaries
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchSummaries = async () => {
+      const clientsSnap = await getDocs(
+        query(collection(db, "clients"), where("accountantId", "==", userId))
+      );
+
+      const summaries: ClientSummary[] = [];
+      for (const clientDoc of clientsSnap.docs) {
+        const clientData = clientDoc.data();
+        const entriesSnap = await getDocs(
+          query(
+            collection(db, "ledgerEntries"),
+            where("clientId", "==", clientDoc.id)
+          )
+        );
+
+        const entries = entriesSnap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as LedgerEntry[];
+        const newEntries = entries.filter((e) => !e.reviewed);
+        const totalAmount = entries.reduce((sum, e) => sum + e.total, 0);
+        const lastActivity = entries.length
+          ? new Date(
+              Math.max(...entries.map((e) => new Date(e.date).getTime()))
+            ).toLocaleString()
+          : "No activity";
+
+        summaries.push({
+          companyName: clientData.companyName,
+          totalEntries: entries.length,
+          newEntries: newEntries.length,
+          lastActivity,
+          totalAmount,
+        });
+      }
+      setClientSummaries(summaries);
+    };
+
+    fetchSummaries();
+    const interval = setInterval(fetchSummaries, 10000); // auto-refresh
+    return () => clearInterval(interval);
+  }, [userId]);
+
+  const handleViewClient = async (companyName: string) => {
     setSelectedClient(companyName);
-    const entries = getLedgerEntries(companyName);
-    const newClientEntries = getNewEntriesForAccountant(companyName);
-    setClientEntries(entries);
-    setNewEntries(newClientEntries);
+    const clientDocSnap = await getDocs(
+      query(
+        collection(db, "clients"),
+        where("accountantId", "==", userId),
+        where("companyName", "==", companyName)
+      )
+    );
+    if (clientDocSnap.empty) return;
+    const clientId = clientDocSnap.docs[0].id;
+
+    const entriesSnap = await getDocs(
+      query(collection(db, "ledgerEntries"), where("clientId", "==", clientId))
+    );
+    const allEntries = entriesSnap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    })) as LedgerEntry[];
+    setClientEntries(allEntries);
+    setNewEntries(allEntries.filter((e) => !e.reviewed));
   };
 
-  const handleMarkAsReviewed = (companyName: string) => {
-    markEntriesAsReviewed(companyName);
+  const handleMarkAsReviewed = async (companyName: string) => {
+    const clientDocSnap = await getDocs(
+      query(
+        collection(db, "clients"),
+        where("accountantId", "==", userId),
+        where("companyName", "==", companyName)
+      )
+    );
+    if (clientDocSnap.empty) return;
+    const clientId = clientDocSnap.docs[0].id;
+
+    const entriesSnap = await getDocs(
+      query(
+        collection(db, "ledgerEntries"),
+        where("clientId", "==", clientId),
+        where("reviewed", "==", false)
+      )
+    );
+
+    const batchUpdates = entriesSnap.docs.map((docSnap) =>
+      updateDoc(doc(db, "ledgerEntries", docSnap.id), { reviewed: true })
+    );
+    await Promise.all(batchUpdates);
+
     setNewEntries([]);
-    setClientSummaries(getAccountantSummary());
     toast.success(`Marked ${companyName} entries as reviewed`);
   };
 
@@ -101,14 +185,14 @@ export function ClientActivities() {
             <Card className="border-orange-200 bg-orange-50">
               <CardHeader>
                 <CardTitle className="text-orange-800 flex items-center">
-                  <AlertCircle className="mr-2 h-5 w-5" />
-                  New Entries Requiring Review
+                  <AlertCircle className="mr-2 h-5 w-5" /> New Entries Requiring
+                  Review
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {newEntries.map((entry, index) => (
-                    <div key={index} className="p-3 bg-white rounded border">
+                  {newEntries.map((entry) => (
+                    <div key={entry.id} className="p-3 bg-white rounded border">
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="font-medium">{entry.storeName}</div>
@@ -142,8 +226,8 @@ export function ClientActivities() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {clientEntries.map((entry, index) => (
-                  <div key={index} className="p-3 border rounded">
+                {clientEntries.map((entry) => (
+                  <div key={entry.id} className="p-3 border rounded">
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="font-medium">{entry.storeName}</div>
@@ -158,7 +242,7 @@ export function ClientActivities() {
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
                           Items:{" "}
-                          {entry.items.map((item: any) => item.name).join(", ")}
+                          {entry.items.map((item) => item.name).join(", ")}
                         </div>
                       </div>
                       <Badge variant="secondary">Processed</Badge>

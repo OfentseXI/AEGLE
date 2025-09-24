@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,9 +28,7 @@ import {
   EyeIcon,
   Download,
   MoreHorizontal,
-  Edit,
   Trash2,
-  FileText,
   Receipt,
   FileSpreadsheet,
 } from "lucide-react";
@@ -40,87 +38,111 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-const mockReceipts = [
-  {
-    id: "REC-001",
-    name: "Office Supply Receipt",
-    date: "2023-06-15",
-    amount: 250.99,
-    category: "asset",
-    status: "processed",
-  },
-  {
-    id: "REC-002",
-    name: "Team Lunch Receipt",
-    date: "2023-06-18",
-    amount: 150.5,
-    category: "food",
-    status: "processed",
-  },
-  {
-    id: "REC-003",
-    name: "Fuel Receipt",
-    date: "2023-06-20",
-    amount: 75.25,
-    category: "transport",
-    status: "processed",
-  },
-  {
-    id: "REC-004",
-    name: "Internet Bill",
-    date: "2023-06-25",
-    amount: 89.99,
-    category: "communication",
-    status: "pending",
-  },
-  {
-    id: "REC-005",
-    name: "Conference Fee Receipt",
-    date: "2023-06-30",
-    amount: 499.0,
-    category: "other",
-    status: "pending",
-  },
-];
+import { db, storage } from "@/integrations/firebase/client";
+import { collection, getDocs, deleteDoc, doc, query } from "firebase/firestore";
+import { getDownloadURL, ref } from "firebase/storage";
 
-const mockStatements = [
-  {
-    id: "STMT-001",
-    name: "June 2023 Bank Statement",
-    date: "2023-06-30",
-    transactionCount: 45,
-    status: "processed",
-  },
-  {
-    id: "STMT-002",
-    name: "May 2023 Bank Statement",
-    date: "2023-05-31",
-    transactionCount: 38,
-    status: "processed",
-  },
-  {
-    id: "STMT-003",
-    name: "April 2023 Bank Statement",
-    date: "2023-04-30",
-    transactionCount: 42,
-    status: "archived",
-  },
-];
+interface Receipt {
+  id: string;
+  name: string;
+  date: string;
+  amount: number;
+  category: string;
+  status: string;
+  filePath?: string; // Firebase Storage path
+}
+
+interface Statement {
+  id: string;
+  name: string;
+  date: string;
+  transactionCount: number;
+  status: string;
+  filePath?: string; // Firebase Storage path
+}
 
 export function DocumentsTable({
   userType,
 }: {
   userType: "accountant" | "business";
 }) {
-  const [activeTab, setActiveTab] = useState("receipts");
+  const [activeTab, setActiveTab] = useState<"receipts" | "statements">(
+    "receipts"
+  );
   const [searchQuery, setSearchQuery] = useState("");
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [statements, setStatements] = useState<Statement[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchReceipts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const col = collection(db, "receipts");
+      const snapshot = await getDocs(col);
+      const data: Receipt[] = snapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() } as Receipt)
+      );
+      setReceipts(data);
+    } catch (err) {
+      console.error("Failed to fetch receipts:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchStatements = useCallback(async () => {
+    setLoading(true);
+    try {
+      const col = collection(db, "statements");
+      const snapshot = await getDocs(col);
+      const data: Statement[] = snapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() } as Statement)
+      );
+      setStatements(data);
+    } catch (err) {
+      console.error("Failed to fetch statements:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch only the active tab's data
+  useEffect(() => {
+    if (activeTab === "receipts") {
+      fetchReceipts();
+    } else {
+      fetchStatements();
+    }
+  }, [activeTab, fetchReceipts, fetchStatements]);
+
+  const handleDelete = async (id: string, type: "receipt" | "statement") => {
+    try {
+      await deleteDoc(
+        doc(db, type === "receipt" ? "receipts" : "statements", id)
+      );
+      if (type === "receipt") fetchReceipts();
+      else fetchStatements();
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
+  };
+
+  const handleDownload = async (filePath?: string) => {
+    if (!filePath) return;
+    try {
+      const fileRef = ref(storage, filePath);
+      const url = await getDownloadURL(fileRef);
+      window.open(url, "_blank");
+    } catch (err) {
+      console.error("Download failed:", err);
+    }
+  };
 
   const getCategoryBadge = (category: string) => {
     const classes = {
@@ -130,11 +152,10 @@ export function DocumentsTable({
       communication: "bg-receipt-communication text-orange-800",
       other: "bg-receipt-other text-purple-800",
     };
-
-    const type = category as keyof typeof classes;
-
     return (
-      <Badge className={classes[type] || classes.other}>
+      <Badge
+        className={classes[category as keyof typeof classes] || classes.other}
+      >
         {category.charAt(0).toUpperCase() + category.slice(1)}
       </Badge>
     );
@@ -147,28 +168,29 @@ export function DocumentsTable({
       archived: "bg-gray-100 text-gray-800 hover:bg-gray-100",
       rejected: "bg-red-100 text-red-800 hover:bg-red-100",
     };
-
-    const type = status as keyof typeof classes;
-
     return (
-      <Badge variant="outline" className={classes[type]}>
+      <Badge
+        variant="outline"
+        className={classes[status as keyof typeof classes]}
+      >
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </Badge>
     );
   };
 
-  const filteredReceipts = mockReceipts.filter(
-    (receipt) =>
-      receipt.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      receipt.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      receipt.category.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredReceipts = receipts.filter(
+    (r) =>
+      r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.id.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredStatements = mockStatements.filter(
-    (statement) =>
-      statement.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      statement.id.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredStatements = statements.filter(
+    (s) =>
+      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.id.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) return <div>Loading documents...</div>;
 
   return (
     <Card>
@@ -192,25 +214,25 @@ export function DocumentsTable({
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Button>
-              <FileText className="mr-2 h-4 w-4" />
-              Export
-            </Button>
           </div>
+
           <Tabs
-            defaultValue="receipts"
             value={activeTab}
-            onValueChange={setActiveTab}
+            onValueChange={(value: "receipts" | "statements") =>
+              setActiveTab(value)
+            }
           >
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="receipts">Receipts</TabsTrigger>
               <TabsTrigger value="statements">Bank Statements</TabsTrigger>
             </TabsList>
-            <TabsContent value="receipts" className="pt-4">
+
+            {/* RECEIPTS TAB */}
+            <TabsContent value="receipts">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Receipt ID</TableHead>
+                    <TableHead>ID</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Amount</TableHead>
@@ -220,107 +242,52 @@ export function DocumentsTable({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredReceipts.length > 0 ? (
-                    filteredReceipts.map((receipt) => (
-                      <TableRow key={receipt.id}>
-                        <TableCell>{receipt.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Receipt className="h-4 w-4 text-muted-foreground" />
-                            {receipt.name}
-                          </div>
+                  {filteredReceipts.length ? (
+                    filteredReceipts.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell>{r.id}</TableCell>
+                        <TableCell className="flex items-center gap-2">
+                          <Receipt className="h-4 w-4 text-muted-foreground" />
+                          {r.name}
                         </TableCell>
-                        <TableCell>{receipt.date}</TableCell>
-                        <TableCell>${receipt.amount.toFixed(2)}</TableCell>
-                        <TableCell>
-                          {getCategoryBadge(receipt.category)}
-                        </TableCell>
-                        <TableCell>{getStatusBadge(receipt.status)}</TableCell>
+                        <TableCell>{r.date}</TableCell>
+                        <TableCell>${r.amount.toFixed(2)}</TableCell>
+                        <TableCell>{getCategoryBadge(r.category)}</TableCell>
+                        <TableCell>{getStatusBadge(r.status)}</TableCell>
                         <TableCell className="text-right">
                           <Dialog>
                             <DialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                              >
+                              <Button variant="ghost" size="icon">
                                 <EyeIcon className="h-4 w-4" />
                               </Button>
                             </DialogTrigger>
                             <DialogContent className="sm:max-w-[425px]">
                               <DialogHeader>
                                 <DialogTitle>Receipt Details</DialogTitle>
-                                <DialogDescription>
-                                  View the extracted information from this
-                                  receipt.
-                                </DialogDescription>
                               </DialogHeader>
-                              <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">ID</Label>
-                                  <div className="col-span-3">{receipt.id}</div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">Name</Label>
-                                  <div className="col-span-3">
-                                    {receipt.name}
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">Date</Label>
-                                  <div className="col-span-3">
-                                    {receipt.date}
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">Amount</Label>
-                                  <div className="col-span-3">
-                                    ${receipt.amount.toFixed(2)}
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">Category</Label>
-                                  <div className="col-span-3">
-                                    {getCategoryBadge(receipt.category)}
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">Status</Label>
-                                  <div className="col-span-3">
-                                    {getStatusBadge(receipt.status)}
-                                  </div>
-                                </div>
-                              </div>
                               <DialogFooter>
-                                <Button className="bg-purple hover:bg-purple-dark">
+                                <Button
+                                  onClick={() => handleDownload(r.filePath)}
+                                >
                                   <Download className="mr-2 h-4 w-4" />
                                   Download
                                 </Button>
                               </DialogFooter>
                             </DialogContent>
                           </Dialog>
+
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                              >
+                              <Button variant="ghost" size="icon">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuItem>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-red-600">
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(r.id, "receipt")}
+                                className="text-red-600"
+                              >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete
                               </DropdownMenuItem>
@@ -342,11 +309,13 @@ export function DocumentsTable({
                 </TableBody>
               </Table>
             </TabsContent>
-            <TabsContent value="statements" className="pt-4">
+
+            {/* STATEMENTS TAB */}
+            <TabsContent value="statements">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Statement ID</TableHead>
+                    <TableHead>ID</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Transactions</TableHead>
@@ -355,106 +324,51 @@ export function DocumentsTable({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredStatements.length > 0 ? (
-                    filteredStatements.map((statement) => (
-                      <TableRow key={statement.id}>
-                        <TableCell>{statement.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                            {statement.name}
-                          </div>
+                  {filteredStatements.length ? (
+                    filteredStatements.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell>{s.id}</TableCell>
+                        <TableCell className="flex items-center gap-2">
+                          <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                          {s.name}
                         </TableCell>
-                        <TableCell>{statement.date}</TableCell>
-                        <TableCell>{statement.transactionCount}</TableCell>
-                        <TableCell>
-                          {getStatusBadge(statement.status)}
-                        </TableCell>
+                        <TableCell>{s.date}</TableCell>
+                        <TableCell>{s.transactionCount}</TableCell>
+                        <TableCell>{getStatusBadge(s.status)}</TableCell>
                         <TableCell className="text-right">
                           <Dialog>
                             <DialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                              >
+                              <Button variant="ghost" size="icon">
                                 <EyeIcon className="h-4 w-4" />
                               </Button>
                             </DialogTrigger>
                             <DialogContent className="sm:max-w-[425px]">
                               <DialogHeader>
-                                <DialogTitle>
-                                  Bank Statement Details
-                                </DialogTitle>
-                                <DialogDescription>
-                                  View the extracted information from this bank
-                                  statement.
-                                </DialogDescription>
+                                <DialogTitle>Statement Details</DialogTitle>
                               </DialogHeader>
-                              <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">ID</Label>
-                                  <div className="col-span-3">
-                                    {statement.id}
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">Name</Label>
-                                  <div className="col-span-3">
-                                    {statement.name}
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">Date</Label>
-                                  <div className="col-span-3">
-                                    {statement.date}
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">
-                                    Transactions
-                                  </Label>
-                                  <div className="col-span-3">
-                                    {statement.transactionCount}
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right">Status</Label>
-                                  <div className="col-span-3">
-                                    {getStatusBadge(statement.status)}
-                                  </div>
-                                </div>
-                              </div>
                               <DialogFooter>
-                                <Button className="bg-purple hover:bg-purple-dark">
+                                <Button
+                                  onClick={() => handleDownload(s.filePath)}
+                                >
                                   <Download className="mr-2 h-4 w-4" />
                                   Download
                                 </Button>
                               </DialogFooter>
                             </DialogContent>
                           </Dialog>
+
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                              >
+                              <Button variant="ghost" size="icon">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuItem>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-red-600">
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(s.id, "statement")}
+                                className="text-red-600"
+                              >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete
                               </DropdownMenuItem>

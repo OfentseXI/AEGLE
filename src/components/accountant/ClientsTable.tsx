@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   Table,
   TableBody,
@@ -7,96 +6,34 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useToast } from "@/hooks/use-toast";
-//import { supabase } from "@/integrations/supabase/client";
-import StatusBadge from "./StatusBadge";
 import { ClientActionButtons } from "./ClientActionButtons";
+import StatusBadge from "./StatusBadge";
 
 interface Client {
   id: string;
-  full_name: string;
-  company_name: string;
-  status: string;
+  fullName: string;
+  companyName: string;
+  email: string;
+  phone?: string;
+  status?: "pending" | "active" | "inactive";
 }
 
-export function ClientsTable() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const { toast } = useToast();
+interface ClientsTableProps {
+  clients: Client[];
+  loading: boolean;
+}
 
-  const fetchClients = async () => {
-    try {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) return;
-
-      const { data, error } = await supabase
-        .from("accountant_clients")
-        .select(
-          `
-          client_id,
-          status,
-          profiles:client_id (
-            id,
-            full_name,
-            company_name
-          )
-        `
-        )
-        .eq("accountant_id", user.user.id);
-
-      if (error) throw error;
-
-      setClients(
-        data.map((item: any) => ({
-          id: item.profiles.id,
-          full_name: item.profiles.full_name || "N/A",
-          company_name: item.profiles.company_name || "N/A",
-          status: item.status,
-        }))
-      );
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to fetch clients",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const updateClientStatus = async (clientId: string, newStatus: string) => {
-    try {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) return;
-
-      const { error } = await supabase
-        .from("accountant_clients")
-        .update({ status: newStatus })
-        .match({ accountant_id: user.user.id, client_id: clientId });
-
-      if (error) throw error;
-
-      await fetchClients();
-      toast({
-        title: "Status Updated",
-        description: "Client status has been updated successfully.",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update status",
-        variant: "destructive",
-      });
-    }
-  };
-
-  useEffect(() => {
-    fetchClients();
-  }, []);
-
-  if (isLoading) {
+export function ClientsTable({ clients, loading }: ClientsTableProps) {
+  if (loading) {
     return <div>Loading clients...</div>;
+  }
+
+  if (clients.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No clients found.
+      </div>
+    );
   }
 
   return (
@@ -105,6 +42,8 @@ export function ClientsTable() {
         <TableRow>
           <TableHead>Name</TableHead>
           <TableHead>Company</TableHead>
+          <TableHead>Email</TableHead>
+          <TableHead>Phone</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Actions</TableHead>
         </TableRow>
@@ -112,18 +51,19 @@ export function ClientsTable() {
       <TableBody>
         {clients.map((client) => (
           <TableRow key={client.id}>
-            <TableCell>{client.full_name}</TableCell>
-            <TableCell>{client.company_name}</TableCell>
+            <TableCell>{client.fullName}</TableCell>
+            <TableCell>{client.companyName}</TableCell>
+            <TableCell>{client.email}</TableCell>
+            <TableCell>{client.phone || "-"}</TableCell>
             <TableCell>
-              <StatusBadge
-                status={client.status as "pending" | "active" | "inactive"}
-              />
+              <StatusBadge status={client.status || "pending"} />
             </TableCell>
             <TableCell>
               {client.status === "pending" && (
                 <ClientActionButtons
-                  clientId={client.id}
-                  onUpdateStatus={updateClientStatus}
+                  clientId={client.id} onUpdateStatus={function (clientId: string, newStatus: string): Promise<void> {
+                    throw new Error("Function not implemented.");
+                  } }                  // You can pass a callback to update status if needed
                 />
               )}
             </TableCell>

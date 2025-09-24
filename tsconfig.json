@@ -7,14 +7,15 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "forceConsistentCasingInFileNames": true
+      "@/*": ["./src/*"]
     },
+    "forceConsistentCasingInFileNames": true,
     "noImplicitAny": false,
     "noUnusedParameters": false,
     "skipLibCheck": true,
     "allowJs": true,
     "noUnusedLocals": false,
-    "strictNullChecks": false
+    "strictNullChecks": false,
+    "fixToUnknown": true
   }
 }

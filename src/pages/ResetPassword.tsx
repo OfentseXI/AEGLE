@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-//import { supabase } from "@/integrations/supabase/client";
+import { auth } from "@/integrations/firebase/client"; 
+import { sendPasswordResetEmail } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 
 const resetPasswordSchema = z
@@ -64,25 +65,22 @@ const ResetPassword = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: values.password,
+      await sendPasswordResetEmail(auth, values.password, {
+        url: `${window.location.origin}/login`, // redirect after reset
       });
 
-      if (error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-        return;
-      }
+            toast({
+        title: "Password Reset Email Sent",
+        description: "Check your email for instructions to reset your password.",
+      });
 
       toast({
         title: "Password Updated",
         description: "Your password has been successfully updated.",
       });
 
-      navigate("/");
+      form.reset();
+      navigate("/login");
     } catch (err) {
       toast({
         title: "Error",

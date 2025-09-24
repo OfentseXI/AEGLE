@@ -1,4 +1,14 @@
-//import { supabase } from "@/integrations/supabase/client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { db } from "@/integrations/firebase/client";
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  Timestamp,
+} from "firebase/firestore";
 
 interface LedgerItem {
   name: string;
@@ -6,82 +16,48 @@ interface LedgerItem {
   category?: string;
 }
 
-interface LedgerEntry {
+export interface LedgerEntry {
+  id?: string;
   companyName: string;
   date: string;
   storeName: string;
   total: number;
   items: LedgerItem[];
+  createdAt?: Timestamp;
 }
 
-// In-memory storage for now - in a real app would use Supabase or another database
-const ledgerEntries: Record<string, LedgerEntry[]> = {};
-
-// Track new entries for accountant notifications
-const newEntriesForNotification: Record<string, LedgerEntry[]> = {};
-
+// Add a new ledger entry to Firestore
 export async function addToLedger(entry: LedgerEntry): Promise<void> {
   try {
-    console.log("Adding to ledger:", entry);
+    const colRef = collection(db, "ledger_entries");
+    await addDoc(colRef, {
+      companyName: entry.companyName,
+      date: entry.date,
+      storeName: entry.storeName,
+      total: entry.total,
+      items: entry.items,
+      createdAt: Timestamp.now(),
+    });
 
-    // Store in memory
-    if (!ledgerEntries[entry.companyName]) {
-      ledgerEntries[entry.companyName] = [];
-    }
-
-    ledgerEntries[entry.companyName].push(entry);
-
-    // Track for accountant notification
-    if (!newEntriesForNotification[entry.companyName]) {
-      newEntriesForNotification[entry.companyName] = [];
-    }
-    newEntriesForNotification[entry.companyName].push(entry);
-
-    // Auto-notify accountant about new entry
+    // Notify accountant (can later integrate with a notification collection)
     await notifyAccountant(entry.companyName, entry);
 
-    // In a real application, you'd save to Supabase like this:
-    // const { error } = await supabase
-    //   .from('ledger_entries')
-    //   .insert({
-    //     company_name: entry.companyName,
-    //     entry_date: entry.date,
-    //     vendor_name: entry.storeName,
-    //     total_amount: entry.total,
-    //     items: entry.items,
-    //   });
-
-    // if (error) throw error;
-
-    console.log("Current ledger state:", ledgerEntries);
-    return Promise.resolve();
+    console.log("Ledger entry added:", entry);
   } catch (error) {
     console.error("Error adding to ledger:", error);
-    return Promise.reject(error);
+    throw error;
   }
 }
 
-export function getLedgerEntries(companyName: string): LedgerEntry[] {
-  return ledgerEntries[companyName] || [];
-}
-
-export function getNewEntriesForAccountant(companyName: string): LedgerEntry[] {
-  return newEntriesForNotification[companyName] || [];
-}
-
-export function markEntriesAsReviewed(companyName: string): void {
-  newEntriesForNotification[companyName] = [];
-}
-
-export function calculateTotals(companyName: string): {
+export async function calculateTotals(companyName: string): Promise<{
   totalByCategory: Record<string, number>;
   grandTotal: number;
-} {
+}> {
   const entries = getLedgerEntries(companyName);
   const totalByCategory: Record<string, number> = {};
   let grandTotal = 0;
 
-  entries.forEach((entry) => {
+  (await entries).forEach((entry) => {
     grandTotal += entry.total;
 
     entry.items.forEach((item) => {
@@ -103,7 +79,30 @@ export function calculateTotals(companyName: string): {
   };
 }
 
-// Function to notify accountant about new receipts
+// Get all ledger entries for a company
+export async function getLedgerEntries(
+  companyName: string
+): Promise<LedgerEntry[]> {
+  try {
+    const colRef = collection(db, "ledger_entries");
+    const q = query(
+      colRef,
+      where("companyName", "==", companyName),
+      orderBy("date", "desc")
+    );
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<LedgerEntry, "id">),
+    }));
+  } catch (error) {
+    console.error("Error fetching ledger entries:", error);
+    return [];
+  }
+}
+
+// Notify accountant about new entries
 export async function notifyAccountant(
   companyName: string,
   receiptData: any
@@ -114,58 +113,61 @@ export async function notifyAccountant(
       receiptData
     );
 
-    // In a real app, this would integrate with a notification system
-    // Either via email, in-app notifications, etc.
-
-    // For now, we'll simulate the notification being sent
-    // The accountant dashboard will check for new entries periodically
-
-    // Example of how this might work with Supabase:
-    // const { error } = await supabase
-    //   .from('notifications')
-    //   .insert({
-    //     recipient_type: 'accountant',
-    //     company_name: companyName,
-    //     message: `New receipt processed for ${companyName} from ${receiptData.storeName}`,
-    //     receipt_id: receiptData.id,
-    //     read: false,
-    //     created_at: new Date()
-    //   });
-
-    // if (error) throw error;
-
-    return Promise.resolve();
+    // Optional: later, write to a Firestore notifications collection
   } catch (error) {
     console.error("Error notifying accountant:", error);
-    return Promise.reject(error);
   }
 }
 
-// Get all companies with ledger entries (for accountant view)
-export function getAllCompaniesWithEntries(): string[] {
-  return Object.keys(ledgerEntries);
+// Get all companies with ledger entries
+export async function getAllCompaniesWithEntries(): Promise<string[]> {
+  try {
+    const colRef = collection(db, "ledger_entries");
+    const snapshot = await getDocs(colRef);
+
+    const companies = new Set<string>();
+    snapshot.docs.forEach((doc) => {
+      const data = doc.data() as LedgerEntry;
+      companies.add(data.companyName);
+    });
+
+    return Array.from(companies);
+  } catch (error) {
+    console.error("Error fetching companies:", error);
+    return [];
+  }
 }
 
-// Get summary data for accountant dashboard
-export function getAccountantSummary(): Array<{
-  companyName: string;
-  totalEntries: number;
-  newEntries: number;
-  lastActivity: string;
-  totalAmount: number;
-}> {
-  return Object.keys(ledgerEntries).map((companyName) => {
-    const entries = ledgerEntries[companyName];
-    const newEntries = newEntriesForNotification[companyName] || [];
-    const totalAmount = entries.reduce((sum, entry) => sum + entry.total, 0);
-    const lastEntry = entries[entries.length - 1];
+// Get summary for accountant dashboard
+export async function getAccountantSummary(): Promise<
+  Array<{
+    companyName: string;
+    totalEntries: number;
+    lastActivity: string;
+    totalAmount: number;
+  }>
+> {
+  try {
+    const companies = await getAllCompaniesWithEntries();
 
-    return {
-      companyName,
-      totalEntries: entries.length,
-      newEntries: newEntries.length,
-      lastActivity: lastEntry?.date || "No activity",
-      totalAmount,
-    };
-  });
+    const summary = await Promise.all(
+      companies.map(async (companyName) => {
+        const entries = await getLedgerEntries(companyName);
+        const totalAmount = entries.reduce((sum, e) => sum + e.total, 0);
+        const lastEntry = entries[0]; // already ordered by date desc
+
+        return {
+          companyName,
+          totalEntries: entries.length,
+          lastActivity: lastEntry?.date || "No activity",
+          totalAmount,
+        };
+      })
+    );
+
+    return summary;
+  } catch (error) {
+    console.error("Error generating accountant summary:", error);
+    return [];
+  }
 }

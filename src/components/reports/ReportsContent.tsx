@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileSpreadsheet, FileText, Download, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,38 +8,39 @@ import { AnnualFinancialStatementsTable } from "./AnnualFinancialStatementsTable
 import { generateQuarterlyReport } from "@/lib/quarterly-report-generator";
 import { generateAnnualFinancialStatements } from "@/lib/annual-statements-generator";
 import { getLedgerEntries } from "@/lib/ledger-operations";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface ReportsContentProps {
   userType: "business" | "accountant";
 }
 
 export const ReportsContent = ({ userType }: ReportsContentProps) => {
+  const [ledgerEntries, setLedgerEntries] = useState<any[]>([]);
   const [showQuarterlyReport, setShowQuarterlyReport] = useState(false);
   const [showAnnualStatements, setShowAnnualStatements] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleGenerateQuarterlyReport = () => {
-    const ledgerEntries = getLedgerEntries("Johnson Enterprises Ltd");
-    const currentYear = new Date().getFullYear();
-    const reportData = generateQuarterlyReport(
-      ledgerEntries,
-      "Johnson Enterprises Ltd",
-      "Q1", // Default to Q1, could be made dynamic
-      `${currentYear}/${currentYear + 1}`
-    );
+  // Fetch ledger entries dynamically for the company
+  const fetchLedgerEntries = async (companyName: string) => {
+    setLoading(true);
+    try {
+      const entries = await getLedgerEntries(companyName);
+      setLedgerEntries(entries);
+    } catch (error) {
+      console.error("Failed to fetch ledger entries:", error);
+      setLedgerEntries([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const handleGenerateQuarterlyReport = async () => {
+    await fetchLedgerEntries("Johnson Enterprises Ltd");
     setShowQuarterlyReport(true);
   };
 
-  const handleGenerateAnnualStatements = () => {
-    const ledgerEntries = getLedgerEntries("Johnson Enterprises Ltd");
-    const currentYear = new Date().getFullYear();
-    const statementsData = generateAnnualFinancialStatements(
-      ledgerEntries,
-      "Johnson Enterprises Ltd",
-      currentYear
-    );
-
+  const handleGenerateAnnualStatements = async () => {
+    await fetchLedgerEntries("Johnson Enterprises Ltd");
     setShowAnnualStatements(true);
   };
 
@@ -73,8 +75,9 @@ export const ReportsContent = ({ userType }: ReportsContentProps) => {
     );
   }
 
+  if (loading) return <div>Loading ledger data...</div>;
+
   if (showQuarterlyReport) {
-    const ledgerEntries = getLedgerEntries("Johnson Enterprises Ltd");
     const currentYear = new Date().getFullYear();
     const reportData = generateQuarterlyReport(
       ledgerEntries,
@@ -114,7 +117,6 @@ export const ReportsContent = ({ userType }: ReportsContentProps) => {
   }
 
   if (showAnnualStatements) {
-    const ledgerEntries = getLedgerEntries("Johnson Enterprises Ltd");
     const currentYear = new Date().getFullYear();
     const statementsData = generateAnnualFinancialStatements(
       ledgerEntries,

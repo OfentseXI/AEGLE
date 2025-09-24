@@ -13,7 +13,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-//import { supabase } from "@/integrations/supabase/client";
 import {
   Select,
   SelectContent,
@@ -32,6 +31,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserTypeSelect } from "./UserTypeSelect";
 import { useToast } from "@/hooks/use-toast";
+
+import { auth, db } from "@/integrations/firebase/client"; // your firebase client file
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup,
+  User,
+} from "firebase/auth";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
 // Countries with their respective currencies
 const COUNTRIES = [
@@ -79,43 +90,15 @@ export function AuthForm() {
     },
   });
 
-  // Check if user is already logged in
+  // ✅ Check if user is already logged in
   useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
-
-        if (error) {
-          console.error("Session error:", error);
-          return;
-        }
-
-        if (session?.user) {
-          console.log("User already logged in:", session.user.email);
-
-          // Check user profile to determine redirect - simplified to avoid schema issues
-          const { data: profileData, error: profileError } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("id", session.user.id)
-            .maybeSingle();
-
-          if (profileError) {
-            console.error("Profile error:", profileError);
-          }
-
-          // For now, default to business dashboard
-          navigate("/business-dashboard");
-        }
-      } catch (err) {
-        console.error("Auth check error:", err);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        console.log("User logged in:", user.email);
+        navigate("/business-dashboard"); // default
       }
-    };
-
-    checkUser();
+    });
+    return () => unsubscribe();
   }, [navigate]);
 
   const handleUserTypeSelect = (type: UserType) => {
@@ -123,34 +106,32 @@ export function AuthForm() {
     setAuthMode("register");
   };
 
+  // ✅ Google Sign-In
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
-
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/business-dashboard`,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
-      });
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
 
-      if (error) {
-        console.error("Google auth error:", error);
-        toast({
-          title: "Google Sign In Error",
-          description: error.message,
-          variant: "destructive",
+      // Check if profile exists
+      const profileRef = doc(db, "profiles", user.uid);
+      const profileSnap = await getDoc(profileRef);
+      if (!profileSnap.exists()) {
+        await setDoc(profileRef, {
+          full_name: user.displayName || "",
+          email: user.email,
+          userType,
+          created_at: serverTimestamp(),
         });
       }
-    } catch (err) {
-      console.error("Google auth exception:", err);
+
+      navigate("/business-dashboard");
+    } catch (error: any) {
+      console.error("Google auth error:", error);
       toast({
-        title: "Authentication Error",
-        description: "An unexpected error occurred during Google sign in",
+        title: "Google Sign In Error",
+        description: error.message,
         variant: "destructive",
       });
     } finally {
@@ -158,23 +139,13 @@ export function AuthForm() {
     }
   };
 
+  // ✅ Forgot password
   const handleForgotPassword = async (email: string) => {
     setIsLoading(true);
-
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      await sendPasswordResetEmail(auth, email, {
+        url: `${window.location.origin}/reset-password`,
       });
-
-      if (error) {
-        console.error("Reset password error:", error);
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-        return;
-      }
 
       toast({
         title: "Password Reset Email Sent",
@@ -183,11 +154,11 @@ export function AuthForm() {
       });
 
       setAuthMode("login");
-    } catch (err) {
-      console.error("Reset password exception:", err);
+    } catch (error: any) {
+      console.error("Reset password exception:", error);
       toast({
         title: "Error",
-        description: "An unexpected error occurred",
+        description: error.message,
         variant: "destructive",
       });
     } finally {
@@ -195,6 +166,7 @@ export function AuthForm() {
     }
   };
 
+  // ✅ Form submission
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (authMode === "forgot-password") {
       await handleForgotPassword(values.email);
@@ -205,98 +177,50 @@ export function AuthForm() {
 
     try {
       if (authMode === "login") {
-        console.log("Attempting login for:", values.email);
-
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: values.email.trim(),
-          password: values.password,
+        // Login
+        const userCredential = await signInWithEmailAndPassword(
+          auth,
+          values.email.trim(),
+          values.password
+        );
+        console.log("Login successful:", userCredential.user.email);
+        navigate("/business-dashboard");
+        toast({
+          title: "Welcome back!",
+          description: "You have successfully signed in.",
         });
-
-        if (error) {
-          console.error("Login error:", error);
-
-          // Provide more specific error messages
-          let errorMessage = error.message;
-          if (error.message.includes("Invalid login credentials")) {
-            errorMessage =
-              "Invalid email or password. Please check your credentials and try again.";
-          } else if (error.message.includes("Email not confirmed")) {
-            errorMessage =
-              "Please check your email and click the confirmation link before signing in.";
-          }
-
-          toast({
-            title: "Login Error",
-            description: errorMessage,
-            variant: "destructive",
-          });
-          return;
-        }
-
-        if (data.user) {
-          console.log("Login successful for:", data.user.email);
-
-          // Default to business dashboard for now
-          navigate("/business-dashboard");
-
-          toast({
-            title: "Welcome back!",
-            description: "You have successfully signed in.",
-          });
-        }
       } else {
-        console.log("Attempting registration for:", values.email);
+        // Registration
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          values.email.trim(),
+          values.password
+        );
+        const uid = userCredential.user.uid;
 
-        const { data, error } = await supabase.auth.signUp({
-          email: values.email.trim(),
-          password: values.password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/business-dashboard`,
-            data: {
-              full_name: values.name,
-              company_name: values.companyName,
-              country: values.country,
-              user_type: userType,
-            },
-          },
+        // Store user profile
+        await setDoc(doc(db, "profiles", uid), {
+          full_name: values.name || "",
+          company_name: values.companyName || "",
+          country: values.country || null,
+          userType,
+          created_at: serverTimestamp(),
         });
 
-        if (error) {
-          console.error("Registration error:", error);
+        toast({
+          title: "Registration Successful",
+          description:
+            "Please check your email to verify your account before signing in.",
+        });
 
-          let errorMessage = error.message;
-          if (error.message.includes("User already registered")) {
-            errorMessage =
-              "An account with this email already exists. Please try signing in instead.";
-          }
-
-          toast({
-            title: "Registration Error",
-            description: errorMessage,
-            variant: "destructive",
-          });
-          return;
-        }
-
-        if (data.user) {
-          console.log("Registration successful for:", data.user.email);
-
-          toast({
-            title: "Registration Successful",
-            description:
-              "Please check your email to verify your account before signing in.",
-          });
-
-          // Reset form and switch to login
-          form.reset();
-          setAuthMode("login");
-        }
+        form.reset();
+        setAuthMode("login");
       }
-    } catch (err) {
-      console.error("Authentication exception:", err);
+    } catch (error: any) {
+      console.error("Auth error:", error);
       toast({
         title: "Authentication Error",
-        description: "An unexpected error occurred. Please try again.",
+        description: error.message,
         variant: "destructive",
       });
     } finally {

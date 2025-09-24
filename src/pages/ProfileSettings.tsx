@@ -5,39 +5,62 @@ import { NotificationSettings } from "@/components/profile/NotificationSettings"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-//import { supabase } from "@/integrations/supabase/client";
+import { getAuth, onAuthStateChanged, User } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 const ProfileSettings = () => {
   const { toast } = useToast();
+  const [user, setUser] = useState<User | null>(null);
   const [userName, setUserName] = useState("");
   const [companyName, setCompanyName] = useState("");
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
+    const auth = getAuth();
 
-        if (profile) {
-          setUserName(profile.full_name || "");
-          setCompanyName(profile.company_name || "");
+    //  Listen for auth state changes
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+
+        try {
+          //  Fetch profile from Firestore
+          const profileRef = doc(db, "profiles", firebaseUser.uid);
+          const profileSnap = await getDoc(profileRef);
+
+          if (profileSnap.exists()) {
+            const profile = profileSnap.data();
+            setUserName(profile.full_name || "");
+            setCompanyName(profile.company_name || "");
+          } else {
+            toast({
+              title: "Profile not found",
+              description: "No profile data available for this user.",
+              variant: "destructive",
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching profile:", error);
+          toast({
+            title: "Error",
+            description: "Could not load profile information.",
+            variant: "destructive",
+          });
         }
+      } else {
+        setUser(null);
+        setUserName("");
+        setCompanyName("");
       }
-    };
-    fetchProfile();
-  }, []);
+    });
+
+    return () => unsubscribe(); // ✅ Clean up listener
+  }, [toast]);
 
   return (
     <DashboardLayout
       userType="business"
-      userName={userName}
-      companyName={companyName}
+      userId=""
     >
       <div className="container mx-auto py-6">
         <Card>

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import {
   Table,
@@ -9,7 +10,16 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-//import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  query,
+  orderBy,
+  where,
+} from "firebase/firestore";
 
 interface User {
   id: string;
@@ -19,55 +29,68 @@ interface User {
   created_at: string | null;
 }
 
-export function AdminUserTable({ searchQuery }: { searchQuery: string }) {
+interface AdminUserTableProps {
+  searchQuery: string;
+}
+
+export function AdminUserTable({ searchQuery }: AdminUserTableProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      let query = supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (searchQuery) {
-        query = query.or(
-          `full_name.ilike.%${searchQuery}%,company_name.ilike.%${searchQuery}%`
-        );
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setUsers(data || []);
-    } catch (error: any) {
-      toast({
-        title: "Error fetching users",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const fetchUsers = async () => {
+      setLoading(true);
+      try {
+        let q = query(
+          collection(db, "profiles"),
+          orderBy("created_at", "desc")
+        );
+
+        // If search query exists, filter by full_name or company_name
+        if (searchQuery) {
+          q = query(
+            collection(db, "profiles"),
+            orderBy("created_at", "desc"),
+            where("full_name", ">=", searchQuery),
+            where("full_name", "<=", searchQuery + "\uf8ff")
+          );
+          // Note: Firestore doesn't allow OR queries directly, so you might need multiple queries or a cloud function
+        }
+
+        const snapshot = await getDocs(q);
+        const fetchedUsers: User[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data() as Omit<User, "id">;
+          return {
+            id: docSnap.id,
+            full_name: data.full_name ?? null,
+            company_name: data.company_name ?? null,
+            is_authorized: data.is_authorized ?? false,
+            created_at: data.created_at ?? null,
+          };
+        });
+
+        setUsers(fetchedUsers);
+      } catch (error: any) {
+        toast({
+          title: "Error fetching users",
+          description: error.message,
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchUsers();
-  }, [searchQuery]);
+  }, [searchQuery, toast]);
 
   const handleAuthorize = async (userId: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ is_authorized: !currentStatus })
-        .eq("id", userId);
+      const userRef = doc(db, "profiles", userId);
+      await updateDoc(userRef, { is_authorized: !currentStatus });
 
-      if (error) throw error;
-
-      setUsers(
-        users.map((user) =>
+      setUsers((prev) =>
+        prev.map((user) =>
           user.id === userId ? { ...user, is_authorized: !currentStatus } : user
         )
       );

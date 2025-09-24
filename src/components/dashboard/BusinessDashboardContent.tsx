@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -13,14 +15,51 @@ import {
   BookOpen,
   Camera,
   Settings,
+  CheckCircle,
+  Clock,
+  DollarSign,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { RequestManagementAccount } from "@/components/business/RequestManagementAccount";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { db } from "@/integrations/firebase/client";
+import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 
 export const BusinessDashboardContent = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    totalDocuments: 0,
+    processedEntries: 0,
+    pendingRequests: 0,
+    totalRevenue: 0,
+  });
+
+  // Fetch recent documents / ledger entries
+  useEffect(() => {
+    const fetchRecentActivity = async () => {
+      const q = query(
+        collection(db, "documents"),
+        orderBy("uploadedAt", "desc"),
+        limit(5)
+      );
+      const querySnapshot = await getDocs(q);
+      const activity: any[] = [];
+      querySnapshot.forEach((doc) => {
+        activity.push({ id: doc.id, ...doc.data() });
+      });
+      setRecentActivity(activity);
+      setStats({
+        totalDocuments: activity.length,
+        processedEntries: activity.filter((a) => a.status === "processed")
+          .length,
+        pendingRequests: activity.filter((a) => a.status === "pending").length,
+        totalRevenue: activity.reduce((sum, a) => sum + (a.total || 0), 0),
+      });
+    };
+    fetchRecentActivity();
+  }, []);
 
   const quickActions = [
     {
@@ -69,6 +108,7 @@ export const BusinessDashboardContent = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
         <h2 className="text-3xl font-bold tracking-tight">
           {t("business.dashboardTitle")}
@@ -78,10 +118,73 @@ export const BusinessDashboardContent = () => {
         </p>
       </div>
 
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex justify-between items-center pb-2">
+            <CardTitle className="text-sm font-medium">
+              {t("business.totalDocuments")}
+            </CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalDocuments}</div>
+            <p className="text-xs text-muted-foreground">
+              {t("business.totalDocsDesc")}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex justify-between items-center pb-2">
+            <CardTitle className="text-sm font-medium">
+              {t("business.processedEntries")}
+            </CardTitle>
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.processedEntries}</div>
+            <p className="text-xs text-muted-foreground">
+              {t("business.processedEntriesDesc")}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex justify-between items-center pb-2">
+            <CardTitle className="text-sm font-medium">
+              {t("business.pendingRequests")}
+            </CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.pendingRequests}</div>
+            <p className="text-xs text-muted-foreground">
+              {t("business.pendingRequestsDesc")}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex justify-between items-center pb-2">
+            <CardTitle className="text-sm font-medium">
+              {t("business.totalRevenue")}
+            </CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              £{stats.totalRevenue.toFixed(2)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t("business.totalRevenueDesc")}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Management Account Request Section */}
       <div className="grid gap-6 md:grid-cols-2">
         <RequestManagementAccount />
 
+        {/* Recent Activity Card */}
         <Card>
           <CardHeader>
             <CardTitle>{t("common.recentActivity")}</CardTitle>
@@ -90,11 +193,40 @@ export const BusinessDashboardContent = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-6 text-muted-foreground">
-              <FileText className="mx-auto h-12 w-12 mb-4 opacity-50" />
-              <p>{t("common.noRecentActivity")}</p>
-              <p className="text-sm">{t("common.uploadToSeeActivity")}</p>
-            </div>
+            {recentActivity.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <FileText className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                <p>{t("common.noRecentActivity")}</p>
+                <p className="text-sm">{t("common.uploadToSeeActivity")}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentActivity.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="p-3 border rounded hover:bg-muted/50 cursor-pointer"
+                  >
+                    <div className="flex justify-between">
+                      <div>
+                        <div className="font-medium">{doc.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {new Date(
+                            doc.uploadedAt.seconds * 1000
+                          ).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="text-sm font-medium">
+                        {doc.status === "processed" ? (
+                          <span className="text-green-600">Processed</span>
+                        ) : (
+                          <span className="text-orange-600">Pending</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
