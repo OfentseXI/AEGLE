@@ -1,6 +1,5 @@
-import { Bell, Search } from "lucide-react";
+import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,11 +12,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { signOut } from "firebase/auth";
+import { auth } from "@/integrations/firebase/client";
 
 interface DashboardHeaderProps {
-  userType: "accountant" | "business";
+  userType: "accountant" | "business" | "admin";
   userName: string;
-  companyName: string;
+  companyName?: string;
 }
 
 export function DashboardHeader({
@@ -26,29 +27,37 @@ export function DashboardHeader({
   companyName,
 }: DashboardHeaderProps) {
   const { t } = useLanguage();
+
   const initials = userName
     .split(" ")
-    .map((name) => name[0])
+    .map((n) => n[0])
     .join("")
     .toUpperCase();
+
+  const handleSignOut = async () => {
+    await signOut(auth);
+    window.location.href = "/"; // redirect to landing page
+  };
 
   return (
     <header className="flex h-14 items-center gap-4 border-b border-ledger-border bg-background px-6 sticky top-0 z-10">
       <div className="w-full flex-1 flex items-center gap-2 md:gap-4">
+        {/* Search */}
         <form className="hidden md:flex-1 md:flex max-w-sm">
           <div className="relative w-full">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
+            <input
               type="search"
               placeholder={t("common.search")}
-              className="w-full appearance-none bg-background pl-8 shadow-none"
+              className="w-full pl-8 bg-background text-sm rounded-md"
             />
+            <Bell className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           </div>
         </form>
 
-        {/* Language Selector */}
+        {/* Language selector */}
         <LanguageSelector />
 
+        {/* Notifications */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -68,62 +77,8 @@ export function DashboardHeader({
           >
             <DropdownMenuLabel>{t("nav.notifications")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {userType === "accountant" ? (
-              <>
-                <DropdownMenuItem className="flex flex-col items-start cursor-pointer">
-                  <div className="font-medium">
-                    {t("accountant.newDocumentUploaded")}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {t("notifications.newDocumentUploadedDesc")}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    2 {t("accountant.minutesAgo")}
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="flex flex-col items-start cursor-pointer">
-                  <div className="font-medium">
-                    {t("accountant.accountRequestSubmitted")}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {t("notifications.accountRequestDesc")}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    1 {t("accountant.hoursAgo")}
-                  </div>
-                </DropdownMenuItem>
-              </>
-            ) : (
-              <>
-                <DropdownMenuItem className="flex flex-col items-start cursor-pointer">
-                  <div className="font-medium">
-                    {t("accountant.reportReady")}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {t("notifications.reportReadyDesc")}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    10 {t("accountant.minutesAgo")}
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="flex flex-col items-start cursor-pointer">
-                  <div className="font-medium">
-                    {t("accountant.documentReviewComplete")}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {t("notifications.documentReviewDesc")}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    3 {t("accountant.hoursAgo")}
-                  </div>
-                </DropdownMenuItem>
-              </>
-            )}
-            <DropdownMenuItem className="flex flex-col items-start cursor-pointer">
-              <div className="font-medium">{t("accountant.systemUpdate")}</div>
-              <div className="text-xs text-muted-foreground">
-                {t("notifications.systemUpdateDesc")}
-              </div>
+            <DropdownMenuItem>
+              <div className="font-medium">System Update</div>
               <div className="text-xs text-muted-foreground mt-1">
                 1 {t("accountant.dayAgo")}
               </div>
@@ -134,6 +89,8 @@ export function DashboardHeader({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Account menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="gap-2">
@@ -145,9 +102,11 @@ export function DashboardHeader({
               </Avatar>
               <div className="hidden md:flex flex-col items-start">
                 <span className="text-sm font-medium">{userName}</span>
-                <span className="text-xs text-muted-foreground">
-                  {companyName}
-                </span>
+                {companyName && (
+                  <span className="text-xs text-muted-foreground">
+                    {companyName}
+                  </span>
+                )}
               </div>
             </Button>
           </DropdownMenuTrigger>
@@ -157,7 +116,9 @@ export function DashboardHeader({
             <DropdownMenuItem>{t("common.profile")}</DropdownMenuItem>
             <DropdownMenuItem>{t("common.settings")}</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>{t("common.signOut")}</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSignOut}>
+              {t("common.signOut")}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

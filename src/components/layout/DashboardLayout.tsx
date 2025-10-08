@@ -1,68 +1,63 @@
 import { ReactNode, useEffect, useState } from "react";
-import { MainNav } from "./MainNav";
 import { DashboardHeader } from "./DashboardHeader";
+import { MainNav } from "./MainNav";
+import { auth, db } from "@/integrations/firebase/client";
 import { doc, getDoc } from "firebase/firestore";
-import { firestore } from "@/lib/firebase"; 
 
 interface DashboardLayoutProps {
-  children: ReactNode;
-  userType: "accountant" | "business";
+  userType: "business" | "accountant" | "admin";
   userId: string;
+  children: ReactNode;
+}
+
+interface UserProfile {
+  full_name: string;
+  company_name?: string;
 }
 
 export function DashboardLayout({
-  children,
   userType,
   userId,
+  children,
 }: DashboardLayoutProps) {
-  const [userName, setUserName] = useState<string>("Loading...");
-  const [companyName, setCompanyName] = useState<string>("Loading...");
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchUserData = async () => {
+    const fetchProfile = async () => {
       try {
-        const userRef = doc(firestore, "users", userId);
-        const userSnap = await getDoc(userRef);
-
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setUserName(data.name || "Unknown User");
-
-          if (data.companyId) {
-            const companyRef = doc(firestore, "companies", data.companyId);
-            const companySnap = await getDoc(companyRef);
-            if (companySnap.exists()) {
-              setCompanyName(companySnap.data().name || "Unknown Company");
-            } else {
-              setCompanyName("Unknown Company");
-            }
-          } else {
-            setCompanyName("No Company Assigned");
-          }
-        } else {
-          setUserName("Unknown User");
-          setCompanyName("Unknown Company");
+        const docRef = doc(db, "profiles", userId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setProfile({
+            full_name: data.full_name,
+            company_name: data.company_name,
+          });
         }
-      } catch (error) {
-        console.error("Error fetching user/company data:", error);
-        setUserName("Error");
-        setCompanyName("Error");
+      } catch (err) {
+        console.error("Error fetching profile:", err);
+      } finally {
+        setLoading(false);
       }
     };
-
-    fetchUserData();
+    fetchProfile();
   }, [userId]);
 
+  if (loading) return <div>Loading...</div>;
+
   return (
-    <div className="grid min-h-screen w-full md:grid-cols-[240px_1fr] lg:grid-cols-[280px_1fr]">
+    <div className="flex h-screen">
       <MainNav userType={userType} />
-      <div className="flex flex-col">
+      <div className="flex-1 flex flex-col">
         <DashboardHeader
           userType={userType}
-          userName={userName}
-          companyName={companyName}
+          userName={profile?.full_name || "User"}
+          companyName={profile?.company_name}
         />
-        <main className="flex-1 p-6 bg-ledger-background">{children}</main>
+        <main className="flex-1 overflow-auto p-6 bg-background">
+          {children}
+        </main>
       </div>
     </div>
   );

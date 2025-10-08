@@ -12,9 +12,13 @@ import { Logo } from "@/components/Logo";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSelector } from "@/components/LanguageSelector";
 
-const Index = () => {
+const DashboardSelection = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
+
+  const handleSelect = (dashboard: string) => {
+    navigate(`/login/${dashboard}`);
+  };
 
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -37,6 +41,7 @@ const Index = () => {
         </div>
 
         <div className="grid md:grid-cols-2 gap-8 max-w-2xl mx-auto">
+          {/* Business */}
           <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 border-slate-700 hover:border-teal-400 bg-slate-800">
             <CardHeader className="text-center">
               <div className="mx-auto w-16 h-16 bg-teal-900/30 rounded-full flex items-center justify-center mb-4">
@@ -51,7 +56,7 @@ const Index = () => {
             </CardHeader>
             <CardContent>
               <Button
-                onClick={() => navigate("/business-dashboard")}
+                onClick={() => handleSelect("business")}
                 className="w-full bg-teal-600 hover:bg-teal-700 text-white"
                 size="lg"
               >
@@ -60,6 +65,7 @@ const Index = () => {
             </CardContent>
           </Card>
 
+          {/* Accountant */}
           <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 border-slate-700 hover:border-purple-400 bg-slate-800">
             <CardHeader className="text-center">
               <div className="mx-auto w-16 h-16 bg-purple-900/30 rounded-full flex items-center justify-center mb-4">
@@ -74,7 +80,7 @@ const Index = () => {
             </CardHeader>
             <CardContent>
               <Button
-                onClick={() => navigate("/accountant-dashboard")}
+                onClick={() => handleSelect("accountant")}
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white"
                 size="lg"
               >
@@ -88,7 +94,6 @@ const Index = () => {
           <Button
             variant="outline"
             onClick={() => {
-              // Open support or contact form
               console.log("Opening support...");
             }}
             className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
@@ -101,4 +106,4 @@ const Index = () => {
   );
 };
 
-export default Index;
+export default DashboardSelection;

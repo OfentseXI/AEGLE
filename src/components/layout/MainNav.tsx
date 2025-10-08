@@ -15,9 +15,11 @@ import {
   Globe,
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { Auth } from "firebase/auth";
+import { auth } from "@/integrations/firebase/client";
 
 interface MainNavProps {
-  userType: "accountant" | "business";
+  userType: "accountant" | "business" | "admin";
 }
 
 export function MainNav({ userType }: MainNavProps) {
@@ -25,6 +27,8 @@ export function MainNav({ userType }: MainNavProps) {
   const { t } = useLanguage();
 
   const isAccountant = userType === "accountant";
+  const isBusiness = userType === "business";
+  const isAdmin = userType === "admin";
 
   const navItems = isAccountant
     ? [
@@ -55,7 +59,8 @@ export function MainNav({ userType }: MainNavProps) {
           label: t("nav.settings"),
         },
       ]
-    : [
+    : isBusiness
+    ? [
         {
           href: "/business-dashboard",
           icon: LayoutDashboard,
@@ -96,13 +101,28 @@ export function MainNav({ userType }: MainNavProps) {
           icon: Settings,
           label: t("nav.profileSettings"),
         },
+      ]
+    : [
+        // Admin Nav
+        { href: "/admin", icon: LayoutDashboard, label: t("nav.dashboard") },
       ];
+
+  const handleSignOut = async () => {
+    await import("firebase/auth").then(({ signOut }) => signOut(auth));
+    window.location.href = "/";
+  };
 
   return (
     <div className="flex h-screen flex-col border-r border-green-200">
       <div className="flex h-14 items-center border-b border-green-200 px-4">
         <Link
-          to={isAccountant ? "/accountant-dashboard" : "/business-dashboard"}
+          to={
+            isAccountant
+              ? "/accountant-dashboard"
+              : isBusiness
+              ? "/business-dashboard"
+              : "/admin"
+          }
           className="flex items-center gap-2 font-semibold"
         >
           <img
@@ -136,11 +156,15 @@ export function MainNav({ userType }: MainNavProps) {
       </div>
       <div className="mt-auto p-4">
         <div className="flex flex-col gap-2">
-          <Button variant="outline" size="sm" className="justify-start">
+          <Button
+            variant="outline"
+            size="sm"
+            className="justify-start"
+            onClick={handleSignOut}
+          >
             <HelpCircle className="mr-2 h-4 w-4" />
-            {t("common.helpSupport")}
+            Sign Out
           </Button>
-          {/* Removed Sign Out button for now */}
         </div>
       </div>
     </div>

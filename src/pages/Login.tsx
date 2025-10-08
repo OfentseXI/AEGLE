@@ -1,6 +1,27 @@
+import { useParams, useNavigate } from "react-router-dom";
 import { AuthForm } from "@/components/auth/AuthForm";
 
 const Login = () => {
+  const { dashboard } = useParams<{ dashboard: string }>();
+  const navigate = useNavigate();
+
+  const handleLoginSuccess = () => {
+    // Redirect based on dashboard type
+    switch (dashboard) {
+      case "business":
+        navigate("/business-dashboard");
+        break;
+      case "accountant":
+        navigate("/accountant-dashboard");
+        break;
+      case "admin":
+        navigate("/admin");
+        break;
+      default:
+        navigate("/");
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-900 p-4">
       <div className="w-full max-w-md text-center mb-8">
@@ -19,7 +40,8 @@ const Login = () => {
         </p>
       </div>
 
-      <AuthForm />
+      {/* Pass callback into AuthForm so it can notify Login page on success */}
+      <AuthForm onLoginSuccess={handleLoginSuccess} />
     </div>
   );
 };
