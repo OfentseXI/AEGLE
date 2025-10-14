@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ProfileForm } from "@/components/profile/ProfileForm";
 import { NotificationSettings } from "@/components/profile/NotificationSettings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,10 +57,6 @@ const ProfileSettings = () => {
   }, [toast]);
 
   return (
-    <DashboardLayout
-      userType="business"
-      userId=""
-    >
       <div className="container mx-auto py-6">
         <Card>
           <CardHeader>
@@ -83,7 +78,6 @@ const ProfileSettings = () => {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
   );
 };
 

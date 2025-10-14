@@ -48,12 +48,7 @@ const BusinessDashboard = () => {
   }
 
   return (
-    <DashboardLayout
-      userType="business"
-      userId=""
-    >
       <BusinessDashboardContent />
-    </DashboardLayout>
   );
 };
 

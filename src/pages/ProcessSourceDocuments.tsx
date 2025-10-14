@@ -11,11 +11,6 @@ const ProcessSourceDocuments = () => {
   };
 
   return (
-    <DashboardLayout
-      userType="business"
-      userName="Alex Johnson"
-      companyName="Johnson Enterprises Ltd"
-    >
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <div>
@@ -71,11 +66,10 @@ const ProcessSourceDocuments = () => {
                 review and processing.
               </p>
             </div>
-            <UploadDocuments />
+            <UploadDocuments currentUserCompany={""} />
           </TabsContent>
         </Tabs>
       </div>
-    </DashboardLayout>
   );
 };
 

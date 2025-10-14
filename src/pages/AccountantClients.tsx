@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ClientsTable } from "@/components/accountant/ClientsTable";
 import { AddClientDialog } from "@/components/accountant/AddClientDialog";
 import { Button } from "@/components/ui/button";
@@ -46,10 +45,6 @@ const AccountantClients = () => {
   };
 
   return (
-    <DashboardLayout
-      userType="accountant"
-      userId=""
-    >
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Clients</h1>
@@ -67,7 +62,6 @@ const AccountantClients = () => {
           onClientAdded={handleClientAdded}
         />
       </div>
-    </DashboardLayout>
   );
 };
 

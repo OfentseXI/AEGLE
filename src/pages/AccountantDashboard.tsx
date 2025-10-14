@@ -68,12 +68,7 @@ const AccountantDashboard = () => {
   }
 
   return (
-    <DashboardLayout
-      userType="accountant"
-      userId=""
-    >
       <AccountantDashboardContent />
-    </DashboardLayout>
   );
 };
 

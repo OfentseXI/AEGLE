@@ -1,4 +1,4 @@
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
+
 import {
   Card,
   CardContent,
@@ -234,11 +234,7 @@ const InternationalTrade = () => {
   };
 
   return (
-    <DashboardLayout
-      userType="business"
-      userName="Trade Manager"
-      companyName="Global Trade Co."
-    >
+
       <div className="space-y-6">
         {/* Header Section */}
         <div className="text-center space-y-4">
@@ -412,7 +408,6 @@ const InternationalTrade = () => {
           </Card>
         </div>
       </div>
-    </DashboardLayout>
   );
 };
 

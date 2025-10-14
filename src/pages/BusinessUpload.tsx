@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { UploadDocuments } from "@/components/documents/UploadDocuments";
 import { Button } from "@/components/ui/button";
 import { FileText } from "lucide-react";
@@ -9,11 +8,6 @@ const BusinessUpload = () => {
   };
 
   return (
-    <DashboardLayout
-      userType="business"
-      userName="Alex Johnson"
-      companyName="Johnson Enterprises Ltd"
-    >
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Upload Documents</h1>
@@ -26,9 +20,8 @@ const BusinessUpload = () => {
             View General Ledger
           </Button>
         </div>
-        <UploadDocuments />
+        <UploadDocuments currentUserCompany={""} />
       </div>
-    </DashboardLayout>
   );
 };
 
