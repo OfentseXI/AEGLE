@@ -1,4 +1,3 @@
-
 import {
   Card,
   CardContent,
@@ -29,10 +28,12 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useState } from "react";
+import { StartTradeDialog } from "@/components/trade/StartTradeDialog";
 
 const InternationalTrade = () => {
   const { t } = useLanguage();
   const [selectedCountry, setSelectedCountry] = useState<string>("");
+  const [isTradeDialogOpen, setIsTradeDialogOpen] = useState(false);
 
   const countries = [
     { code: "brazil", name: t("trade.brazil") },
@@ -234,180 +235,182 @@ const InternationalTrade = () => {
   };
 
   return (
-
-      <div className="space-y-6">
-        {/* Header Section */}
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
-            {t("trade.internationalTrade")}
-          </h1>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            {t("trade.makeTradeEasy")}
-          </p>
-          <div className="flex justify-center gap-4 mt-6">
-            <Button
-              className="bg-green-600 hover:bg-green-700"
-              onClick={() => {
-                // Navigate to trade initiation flow or show dialog
-                console.log("Starting new trade...");
-              }}
-            >
-              {t("trade.startNewTrade")}
-            </Button>
-            <Button variant="outline">{t("trade.viewActiveShipments")}</Button>
-          </div>
+    <div className="space-y-6">
+      {/* Header Section */}
+      <div className="text-center space-y-4">
+        <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
+          {t("trade.internationalTrade")}
+        </h1>
+        <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+          {t("trade.makeTradeEasy")}
+        </p>
+        <div className="flex justify-center gap-4 mt-6">
+          <Button
+            className="bg-green-600 hover:bg-green-700"
+            onClick={() => setIsTradeDialogOpen(true)}
+          >
+            {t("trade.startNewTrade")}
+          </Button>
+          <Button variant="outline">{t("trade.viewActiveShipments")}</Button>
         </div>
+      </div>
 
-        {/* Country Selection */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-6 w-6" />
-              {t("trade.selectCountry")}
-            </CardTitle>
-            <CardDescription>{t("trade.selectCountryDesc")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Select value={selectedCountry} onValueChange={setSelectedCountry}>
-              <SelectTrigger className="w-full max-w-md">
-                <SelectValue placeholder="Select a country..." />
-              </SelectTrigger>
-              <SelectContent>
-                {countries.map((country) => (
-                  <SelectItem key={country.code} value={country.code}>
-                    {country.name}
-                  </SelectItem>
+      {/* Start Trade Dialog */}
+      <StartTradeDialog
+        open={isTradeDialogOpen}
+        onOpenChange={setIsTradeDialogOpen}
+      />
+
+      {/* Country Selection */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="h-6 w-6" />
+            {t("trade.selectCountry")}
+          </CardTitle>
+          <CardDescription>{t("trade.selectCountryDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+            <SelectTrigger className="w-full max-w-md">
+              <SelectValue placeholder="Select a country..." />
+            </SelectTrigger>
+            <SelectContent>
+              {countries.map((country) => (
+                <SelectItem key={country.code} value={country.code}>
+                  {country.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {selectedCountry && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-4">
+                {t("trade.documentationRequirements")} -{" "}
+                {countries.find((c) => c.code === selectedCountry)?.name}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {getCountryDocuments(selectedCountry).map((doc, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg border"
+                  >
+                    <FileText className="h-4 w-4 text-primary" />
+                    <span className="text-sm">{doc}</span>
+                  </div>
                 ))}
-              </SelectContent>
-            </Select>
-
-            {selectedCountry && (
-              <div className="mt-6">
-                <h3 className="text-lg font-semibold mb-4">
-                  {t("trade.documentationRequirements")} -{" "}
-                  {countries.find((c) => c.code === selectedCountry)?.name}
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {getCountryDocuments(selectedCountry).map((doc, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg border"
-                    >
-                      <FileText className="h-4 w-4 text-primary" />
-                      <span className="text-sm">{doc}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Trade Process Flow */}
+      {/* Trade Process Flow */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Ship className="h-6 w-6" />
+            {t("trade.tradeProcessFlow")}
+          </CardTitle>
+          <CardDescription>{t("trade.endToEndTradeFlow")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6">
+            {tradeStages.map((stage, index) => (
+              <div key={stage.id} className="relative">
+                <div className="flex items-start gap-4">
+                  {/* Stage Icon */}
+                  <div
+                    className={`p-3 rounded-full ${stage.color} flex-shrink-0`}
+                  >
+                    <stage.icon className="h-6 w-6 text-white" />
+                  </div>
+
+                  {/* Stage Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-lg font-semibold">{stage.title}</h3>
+                      {getStatusIcon(stage.status)}
+                      {getStatusBadge(stage.status)}
+                    </div>
+
+                    <p className="text-muted-foreground mb-4">
+                      {stage.description}
+                    </p>
+
+                    {/* Documents Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {stage.documents.map((doc, docIndex) => (
+                        <div
+                          key={docIndex}
+                          className="flex items-center gap-2 p-2 bg-muted/50 rounded-md text-sm"
+                        >
+                          <FileText className="h-3 w-3 text-muted-foreground" />
+                          <span className="truncate">{doc}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connecting Arrow */}
+                {index < tradeStages.length - 1 && (
+                  <div className="flex justify-center mt-4 mb-2">
+                    <ArrowRight className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Key Features */}
+      <div className="grid md:grid-cols-3 gap-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Ship className="h-6 w-6" />
-              {t("trade.tradeProcessFlow")}
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              {t("trade.autoValidation")}
             </CardTitle>
-            <CardDescription>{t("trade.endToEndTradeFlow")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-6">
-              {tradeStages.map((stage, index) => (
-                <div key={stage.id} className="relative">
-                  <div className="flex items-start gap-4">
-                    {/* Stage Icon */}
-                    <div
-                      className={`p-3 rounded-full ${stage.color} flex-shrink-0`}
-                    >
-                      <stage.icon className="h-6 w-6 text-white" />
-                    </div>
-
-                    {/* Stage Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold">{stage.title}</h3>
-                        {getStatusIcon(stage.status)}
-                        {getStatusBadge(stage.status)}
-                      </div>
-
-                      <p className="text-muted-foreground mb-4">
-                        {stage.description}
-                      </p>
-
-                      {/* Documents Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {stage.documents.map((doc, docIndex) => (
-                          <div
-                            key={docIndex}
-                            className="flex items-center gap-2 p-2 bg-muted/50 rounded-md text-sm"
-                          >
-                            <FileText className="h-3 w-3 text-muted-foreground" />
-                            <span className="truncate">{doc}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Connecting Arrow */}
-                  {index < tradeStages.length - 1 && (
-                    <div className="flex justify-center mt-4 mb-2">
-                      <ArrowRight className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <p className="text-muted-foreground">
+              {t("trade.autoValidationDesc")}
+            </p>
           </CardContent>
         </Card>
 
-        {/* Key Features */}
-        <div className="grid md:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                {t("trade.autoValidation")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                {t("trade.autoValidationDesc")}
-              </p>
-            </CardContent>
-          </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-blue-600" />
+              {t("trade.complianceTracking")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">
+              {t("trade.complianceTrackingDesc")}
+            </p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-blue-600" />
-                {t("trade.complianceTracking")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                {t("trade.complianceTrackingDesc")}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-purple-600" />
-                {t("trade.realTimeTracking")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                {t("trade.realTimeTrackingDesc")}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-purple-600" />
+              {t("trade.realTimeTracking")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">
+              {t("trade.realTimeTrackingDesc")}
+            </p>
+          </CardContent>
+        </Card>
       </div>
+    </div>
   );
 };
 
